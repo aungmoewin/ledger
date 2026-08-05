@@ -9,8 +9,8 @@ Planning started 2026-08-04. Standalone repo — not part of `modern-react-stack
 > checklist at the bottom as each one lands.
 
 **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) — the route tree and component hierarchy,
-with every Server/Client boundary marked. This file covers *when* each piece gets built;
-that one covers *how it is shaped*.
+with every Server/Client boundary marked. This file covers _when_ each piece gets built;
+that one covers _how it is shaped_.
 
 ---
 
@@ -24,41 +24,41 @@ Two features carry the weight of justifying the client-side tools:
 - **Shared households** — requires users, roles, and per-household data isolation.
 
 Without those two, half the stack below would be gratuitous. That is the point: this repo is
-also a study in *when* a tool becomes justified.
+also a study in _when_ a tool becomes justified.
 
 ---
 
 ## Stack alignment map
 
-| Stack | Where it lives in Ledger | Genuine, or learning-only? |
-|---|---|---|
-| **Next.js 16 + React + TS** | the whole app | ✅ core |
-| **Tailwind + shadcn/ui** | all UI + the design system | ✅ core |
-| **Zod** | validation + shared contracts everywhere | ✅ core |
-| **Server Actions** | simple mutations (add category, set budget) | ✅ Next-native |
-| **React Hook Form + Zod** | the "split one expense across categories" form — dynamic row array, live validation | ✅ complex client form |
-| **TanStack Query v5** (+ RSC hydrate) | transactions list — infinite scroll + optimistic add; polling FX rates | ✅ client-interactive data |
-| **Zustand** | client UI state — filter panel, add-expense wizard step, theme | ✅ client UI state |
-| **MSW** | tests — mock the external currency/FX API | ✅ mocking a *third party* |
-| **shadcn Charts (Recharts)** | dashboard — spend-by-category + trend | ✅ data viz |
+| Stack                                 | Where it lives in Ledger                                                            | Genuine, or learning-only? |
+| ------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------- |
+| **Next.js 16 + React + TS**           | the whole app                                                                       | ✅ core                    |
+| **Tailwind + shadcn/ui**              | all UI + the design system                                                          | ✅ core                    |
+| **Zod**                               | validation + shared contracts everywhere                                            | ✅ core                    |
+| **Server Actions**                    | simple mutations (add category, set budget)                                         | ✅ Next-native             |
+| **React Hook Form + Zod**             | the "split one expense across categories" form — dynamic row array, live validation | ✅ complex client form     |
+| **TanStack Query v5** (+ RSC hydrate) | transactions list — infinite scroll + optimistic add; polling FX rates              | ✅ client-interactive data |
+| **Zustand**                           | client UI state — filter panel, add-expense wizard step, theme                      | ✅ client UI state         |
+| **MSW**                               | tests — mock the external currency/FX API                                           | ✅ mocking a _third party_ |
+| **shadcn Charts (Recharts)**          | dashboard — spend-by-category + trend                                               | ✅ data viz                |
 
 ### The enterprise layers
 
-| Layer | Tool |
-|---|---|
-| Database + ORM | **Postgres (Neon) + Drizzle** |
+| Layer                | Tool                                                 |
+| -------------------- | ---------------------------------------------------- |
+| Database + ORM       | **Postgres (Neon) + Drizzle**                        |
 | Auth + authorization | **Auth.js v5 + RBAC** (household owner/member roles) |
-| Testing | **Vitest + RTL + Playwright** |
-| CI/CD | **GitHub Actions** |
-| Observability | **Sentry** |
-| Deploy | **Vercel** |
+| Testing              | **Vitest + RTL + Playwright**                        |
+| CI/CD                | **GitHub Actions**                                   |
+| Observability        | **Sentry**                                           |
+| Deploy               | **Vercel**                                           |
 
 ---
 
 ## Locked decisions — do not re-litigate
 
 1. **Single Next app, not a monorepo.** Turborepo was considered and rejected: you add repo
-   structure when a *second package* justifies it. Restructure when a real need appears.
+   structure when a _second package_ justifies it. Restructure when a real need appears.
 2. **Neon HTTP driver to start, with a known expiry date.** `neon-http` cannot do interactive
    transactions. Fine through Phase 3; **Phase 4 forces the switch** to `neon-websockets` or a
    pooled connection, because a split expense must insert parent + children atomically.
@@ -100,7 +100,7 @@ Each phase: one commit, green before moving on.
 ### Phase 2 — Auth + households + RBAC
 
 - **Build.** Auth.js v5 with the Drizzle adapter. `users`, `households`, `memberships(role)`.
-  A migration that adds `householdId` to the *existing* expenses table and backfills it. Scope
+  A migration that adds `householdId` to the _existing_ expenses table and backfills it. Scope
   every query by household. Enforce owner-vs-member permissions.
 - **New stack.** Auth.js v5, RBAC, middleware.
 - **Lead lesson.** **Authorization is a data-access concern, not a UI concern** — hiding a
@@ -108,7 +108,7 @@ Each phase: one commit, green before moving on.
   an already-scoped accessor, making an unscoped query hard to write by accident. Also the
   real-world migration dance: add nullable → backfill → set NOT NULL.
 - **Done when.** Two accounts see disjoint data, and a member is denied an owner-only action
-  *on the server*.
+  _on the server_.
 
 ### Phase 3 — Transactions list: TanStack Query + RSC hydration
 
@@ -116,7 +116,7 @@ Each phase: one commit, green before moving on.
   `useInfiniteQuery` on the client. Optimistic add with rollback.
 - **New stack.** TanStack Query v5, RSC hydration.
 - **Lead lesson.** The seam. RSC already fetches on the server, so a client cache earns its
-  place *only* when the client drives refetching, pagination, or optimism. You now have **two
+  place _only_ when the client drives refetching, pagination, or optimism. You now have **two
   cache systems** — Query invalidation and Next's `revalidatePath` — and deciding who owns
   freshness is the real skill.
 - **Done when.** Scrolling loads pages, a new expense appears instantly then reconciles, no
@@ -143,7 +143,7 @@ Each phase: one commit, green before moving on.
 - **Lead lesson.** **Store the rate you applied**, not just the converted amount — otherwise
   last March's report changes when today's rate moves. Third parties fail: timeouts, fallbacks,
   and graceful degradation instead of an outage taking the app down. MSW intercepts the
-  *network*, not your modules, which keeps tests honest.
+  _network_, not your modules, which keeps tests honest.
 - **Done when.** The suite passes with no internet, and a simulated FX outage degrades
   gracefully.
 
@@ -194,7 +194,7 @@ Each phase: one commit, green before moving on.
 - **Build.** Vercel deploy with per-environment vars, preview deploys wired to Neon branches.
   README. A set of ADRs in `docs/adr/` covering every decision from Phases 0–9.
 - **New stack.** Vercel, ADRs.
-- **Lead lesson.** Writing the ADRs *is* the interview prep — each one is "what I chose, what I
+- **Lead lesson.** Writing the ADRs _is_ the interview prep — each one is "what I chose, what I
   rejected, and why". Then the unglamorous production questions: who gets paged, how to roll
   back, what's in the runbook.
 - **Done when.** A live URL, working preview deploys, and an ADR per major decision.
@@ -211,8 +211,8 @@ phase's "lead lesson" is deliberately the part that isn't in the docs.
 
 This is a deliberate "exercise every tool once" design for **learning breadth**. A real lean
 product would include only what the problem demands — and two of these (**TanStack Query** and
-**MSW**) exist here *because* multi-currency was added to justify them. That is the point: learn
-each tool, and learn to see the seam where it becomes justified. Knowing when *not* to reach for
+**MSW**) exist here _because_ multi-currency was added to justify them. That is the point: learn
+each tool, and learn to see the seam where it becomes justified. Knowing when _not_ to reach for
 a tool is the senior half of the skill.
 
 ---

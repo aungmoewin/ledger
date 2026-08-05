@@ -7,10 +7,10 @@ Phase references point at [ROADMAP.md](./ROADMAP.md).
 
 **Legend**
 
-| Mark | Meaning |
-|---|---|
-| `[S]` | Server Component — the default, no directive needed |
-| `[C]` | Client Component — has `'use client'` |
+| Mark     | Meaning                                                            |
+| -------- | ------------------------------------------------------------------ |
+| `[S]`    | Server Component — the default, no directive needed                |
+| `[C]`    | Client Component — has `'use client'`                              |
 | `[pure]` | Presentational, no hooks — renders correctly in either environment |
 
 ---
@@ -79,7 +79,7 @@ dashboard/page.tsx                   [S]  3 aggregate SQL queries, run in parall
         └── MoneyAmount              [pure]  cents → formatted currency
 ```
 
-The shape to internalise: the **page** runs the SQL on the server, and only the chart *leaves*
+The shape to internalise: the **page** runs the SQL on the server, and only the chart _leaves_
 are client, receiving pre-aggregated rows as plain props. The browser never sees a raw expense
 row on this screen.
 
