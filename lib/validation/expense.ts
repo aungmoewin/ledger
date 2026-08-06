@@ -14,3 +14,8 @@ export const expenseInputSchema = z.object({
 });
 
 export type ExpenseInput = z.infer<typeof expenseInputSchema>;
+
+export type ExpenseFormState = {
+  ok?: boolean;
+  fieldErrors?: Record<string, string[]>;
+};
