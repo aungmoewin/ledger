@@ -3,18 +3,23 @@ import { db } from "@/db";
 import { categories, expenses } from "@/db/schema";
 
 export async function listExpenses() {
-  return db
-    .select({
-      id: expenses.id,
-      amountCents: expenses.amountCents,
-      spentOn: expenses.spentOn,
-      note: expenses.note,
-      categoryId: expenses.categoryId,
-      categoryName: categories.name,
-    })
-    .from(expenses)
-    .innerJoin(categories, eq(expenses.categoryId, categories.id))
-    .orderBy(desc(expenses.spentOn), desc(expenses.id));
+  return (
+    db
+      .select({
+        id: expenses.id,
+        amountCents: expenses.amountCents,
+        spentOn: expenses.spentOn,
+        note: expenses.note,
+        categoryId: expenses.categoryId,
+        categoryName: categories.name,
+      })
+      .from(expenses)
+      .innerJoin(categories, eq(expenses.categoryId, categories.id))
+      .orderBy(desc(expenses.spentOn), desc(expenses.id))
+      // Guardrail until Phase 3 replaces this with real cursor pagination.
+      // An unbounded list query is fine at ten rows and a problem at ten thousand.
+      .limit(100)
+  );
 }
 
 export async function getExpenseById(id: number) {

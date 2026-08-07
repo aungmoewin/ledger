@@ -5,6 +5,9 @@ const envSchema = z.object({
     .string()
     .min(1, "DATABASE_URL is required")
     .startsWith("postgresql://", "must be a Postgres connection string"),
+  AUTH_SECRET: z.string().min(1, "AUTH_SECRET is required (npx auth secret)"),
+  AUTH_GITHUB_ID: z.string().min(1, "AUTH_GITHUB_ID is required"),
+  AUTH_GITHUB_SECRET: z.string().min(1, "AUTH_GITHUB_SECRET is required"),
 });
 
 const parsed = envSchema.safeParse(process.env);
