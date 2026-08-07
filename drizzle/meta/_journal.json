@@ -15,6 +15,13 @@
       "when": 1786083687845,
       "tag": "0001_silent_veda",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786088433175,
+      "tag": "0002_ancient_brood",
+      "breakpoints": true
     }
   ]
 }
