@@ -8,6 +8,13 @@
       "when": 1785909935488,
       "tag": "0000_bent_hex",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786083687845,
+      "tag": "0001_silent_veda",
+      "breakpoints": true
     }
   ]
 }
