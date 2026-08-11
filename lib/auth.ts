@@ -7,32 +7,45 @@ import { compare } from "bcryptjs";
 import { db } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
 import { getUserByEmail } from "@/db/queries/users";
-import {
-  ensureHouseholdForUser,
-  getMembershipForUser,
-} from "@/db/queries/households";
+import { ensureHouseholdForUser } from "@/db/queries/households";
 import { signInSchema } from "@/lib/validation/auth";
 
 // A well-formed bcrypt hash that no password matches. Compared against when the
 // email is unknown, so both branches cost the same amount of work.
 const DUMMY_PASSWORD_HASH = `$2a$10$${"x".repeat(53)}`;
 
+// MUST pass the tables explicitly - our table names are plural, and a bare
+// DrizzleAdapter(db) would query the adapter's singular defaults ("user",
+// "account", "session") and fail on first sign-in.
+const drizzleAdapter = DrizzleAdapter(db, {
+  usersTable: users,
+  accountsTable: accounts,
+  sessionsTable: sessions,
+  verificationTokensTable: verificationTokens,
+});
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // MUST pass the tables explicitly - our table names are plural, and a bare
-  // DrizzleAdapter(db) would query the adapter's singular defaults ("user",
-  // "account", "session") and fail on first sign-in.
-  adapter: DrizzleAdapter(db, {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-  }),
+  // The adapter matches email exactly and stores whatever the provider sent,
+  // so GitHub's "Bob@x.com" would miss our "bob@x.com" row, then trip the
+  // lower(email) unique index and 500 instead of raising
+  // OAuthAccountNotLinked. Normalising both directions keeps them in step.
+  adapter: {
+    ...drizzleAdapter,
+    createUser: (user) =>
+      drizzleAdapter.createUser!({
+        ...user,
+        email: user.email.toLowerCase(),
+      }),
+    getUserByEmail: (email) =>
+      drizzleAdapter.getUserByEmail!(email.toLowerCase()),
+  },
 
   // The Credentials provider cannot use database sessions - Auth.js requires
   // JWT for it. The cost is that a token stays valid until it expires.
   // TODO step 6: check users.token_version in the jwt callback so bumping it
   // invalidates outstanding tokens. Nothing reads that column yet.
   session: { strategy: "jwt" },
+  pages: { signIn: "/sign-in" },
 
   providers: [
     GitHub,
@@ -69,33 +82,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
 
-  events: {
-    // Fires only when the adapter creates a user - i.e. OAuth sign-ups.
-    // TODO step 5: the credentials sign-up action must call this too, since the
-    // adapter never sees those users.
-    createUser: async ({ user }) => {
-      if (user.id) {
-        await ensureHouseholdForUser(user.id, user.name ?? null);
-      }
-    },
-  },
-
   callbacks: {
     jwt: async ({ token, user }) => {
-      // `user` is only present on sign-in. Stamping household + role into the
-      // token is the point: scoping every later request costs zero DB reads.
+      // `user` is only present on sign-in. Provisioning here rather than in
+      // events.createUser means it is self-healing: that event fires once ever,
+      // and never at all for credentials users, who the adapter does not create.
+      // ensureHouseholdForUser early-returns when a membership exists, so the
+      // usual path is the same single SELECT it was before.
       if (user?.id) {
-        // token.sub is already the user id - Auth.js sets it.
-        const membership = await getMembershipForUser(user.id);
-        token.householdId = membership?.householdId;
-        token.role = membership?.role;
+        const membership = await ensureHouseholdForUser(
+          user.id,
+          user.name ?? null,
+        );
+        token.householdId = membership.householdId;
+        token.role = membership.role;
       }
       return token;
     },
     session: async ({ session, token }) => {
+      // No casts on householdId/role - types/next-auth.d.ts already declares
+      // them on JWT. token.sub does need one; it is optional on JWT.
       session.user.id = token.sub as string;
-      session.householdId = token.householdId as number | undefined;
-      session.role = token.role as "owner" | "member" | undefined;
+      session.householdId = token.householdId;
+      session.role = token.role;
       return session;
     },
   },

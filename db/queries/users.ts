@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 
@@ -13,7 +13,9 @@ export async function getUserByEmail(email: string) {
       tokenVersion: users.tokenVersion,
     })
     .from(users)
-    .where(eq(users.email, email))
+    // lower(), not eq(): rows created by the Auth.js adapter hold whatever
+    // casing the provider sent, and this has to match users_email_lower_idx.
+    .where(sql`lower(${users.email}) = ${email}`)
     .limit(1);
 
   return row ?? null;

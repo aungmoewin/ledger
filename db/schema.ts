@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   date,
   integer,
@@ -6,6 +7,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -51,22 +53,28 @@ export const expenses = pgTable("expenses", {
 // explicitly to DrizzleAdapter, or it falls back to its own singular defaults.
 // Every column we add ourselves uses snake_case, like the rest of the schema.
 
-export const users = pgTable("users", {
-  id: text()
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: text(),
-  email: text().unique(),
-  emailVerified: timestamp({ mode: "date" }),
-  image: text(),
+export const users = pgTable(
+  "users",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text(),
+    email: text().unique(),
+    emailVerified: timestamp({ mode: "date" }),
+    image: text(),
 
-  // Ours, not the adapter's - hence snake_case, unlike the columns above.
-  // Null for OAuth-only users; set by the Credentials provider.
-  passwordHash: text("password_hash"),
-  // JWT sessions cannot be revoked server-side. Bumping this invalidates every
-  // outstanding token for the user - checked in the jwt callback.
-  tokenVersion: integer("token_version").notNull().default(0),
-});
+    // Ours, not the adapter's - hence snake_case, unlike the columns above.
+    // Null for OAuth-only users; set by the Credentials provider.
+    passwordHash: text("password_hash"),
+    // JWT sessions cannot be revoked server-side. Bumping this invalidates every
+    // outstanding token for the user - checked in the jwt callback.
+    tokenVersion: integer("token_version").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("users_email_lower_idx").on(sql`lower(${table.email})`),
+  ],
+);
 
 export const accounts = pgTable(
   "accounts",

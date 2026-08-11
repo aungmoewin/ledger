@@ -17,3 +17,8 @@ export const signUpSchema = z.object({
   // unbounded input is a cheap denial of service via hashing cost.
   password: z.string().min(10, "Use at least 10 characters").max(200),
 });
+
+export type AuthFormState = {
+  formError?: string;
+  fieldErrors?: Record<string, string[]>;
+};

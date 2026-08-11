@@ -13,8 +13,26 @@ import { env } from "@/lib/env";
 // change. Cache it on globalThis outside production.
 const globalForDb = globalThis as unknown as { pool?: Pool };
 
-const pool =
-  globalForDb.pool ?? new Pool({ connectionString: env.DATABASE_URL });
+// Built in a function, not inline with ??, so the listener attaches exactly
+// once per pool. Inline, every HMR reload would add another and you would hit
+// MaxListenersExceededWarning after eleven edits.
+function createPool() {
+  const created = new Pool({ connectionString: env.DATABASE_URL });
+
+  // Pool is an EventEmitter, and Node rethrows an "error" event with no
+  // listener - killing the process. Neon closes idle connections when it
+  // scales to zero, so this fires in normal operation, far from any request.
+  // The pool reconnects itself; this exists purely to keep the process alive.
+  // Annotated because Pool types the listener as `any`, so there is no
+  // contextual type to infer from and noImplicitAny rejects a bare parameter.
+  created.on("error", (error: Error) => {
+    console.error("[db] idle client error", error);
+  });
+
+  return created;
+}
+
+const pool = globalForDb.pool ?? createPool();
 
 if (process.env.NODE_ENV !== "production") {
   globalForDb.pool = pool;
