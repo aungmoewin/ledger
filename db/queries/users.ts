@@ -20,3 +20,21 @@ export async function getUserByEmail(email: string) {
 
   return row ?? null;
 }
+
+/**
+ * Deliberately does not touch households. The jwt callback provisions one on
+ * first token, through the same path OAuth uses - so there is one place where
+ * that invariant lives, not two.
+ */
+export async function createCredentialsUser(input: {
+  name: string;
+  email: string;
+  passwordHash: string;
+}) {
+  const [row] = await db
+    .insert(users)
+    .values(input)
+    .returning({ id: users.id });
+
+  return row;
+}
