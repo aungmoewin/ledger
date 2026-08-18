@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
+import { FieldError } from "@/components/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ExpenseFormState } from "@/lib/validation/expense";
@@ -93,14 +94,13 @@ export function ExpenseForm({
         <FieldError messages={state.fieldErrors?.note} />
       </div>
 
+      {state.formError ? (
+        <p className="text-destructive text-sm">{state.formError}</p>
+      ) : null}
+
       <Button type="submit" disabled={pending}>
         {pending ? "Saving…" : submitLabel}
       </Button>
     </form>
   );
-}
-
-function FieldError({ messages }: { messages?: string[] }) {
-  if (!messages?.length) return null;
-  return <p className="text-sm text-destructive">{messages[0]}</p>;
 }

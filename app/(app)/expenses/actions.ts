@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { expenses } from "@/db/schema";
 import { parseAmountToCents } from "@/lib/money";
@@ -10,7 +10,8 @@ import {
   type ExpenseFormState,
 } from "@/lib/validation/expense";
 import { redirect } from "next/navigation";
-import { DatabaseError } from "@neondatabase/serverless";
+import { asPgError } from "@/lib/db-errors";
+import { getSession } from "@/lib/dal";
 
 type ParsedExpense = {
   amountCents: number;
@@ -60,24 +61,31 @@ function parseExpenseForm(
   };
 }
 
-// 23503 = foreign_key_violation. The category vanished between render and
-// submit, or the id was fabricated. Either way it is a field error, not a 500.
-//
-// categoryId is the only populated foreign key on this table today, so the code
-// alone identifies the culprit. Once step 7 sets household_id on insert, narrow
-// this to error.constraint - otherwise a bad household blames the category.
+// 23503 = foreign_key_violation. Now that household_id and created_by_id are
+// populated too, the code alone no longer identifies the culprit - a deleted
+// household would blame the category. Match the constraint from 0000_bent_hex.sql.
 const MISSING_CATEGORY: ExpenseFormState = {
   fieldErrors: { categoryId: ["That category no longer exists"] },
 };
 
 function isMissingCategory(error: unknown) {
-  return error instanceof DatabaseError && error.code === "23503";
+  const pg = asPgError(error);
+
+  return (
+    pg?.code === "23503" &&
+    pg.constraint === "expenses_category_id_categories_id_fk"
+  );
 }
 
 export async function createExpense(
   _prevState: ExpenseFormState,
   formData: FormData,
 ): Promise<ExpenseFormState> {
+  const session = await getSession();
+  if (!session) {
+    return { formError: "Your session has expired. Sign in again." };
+  }
+
   const result = parseExpenseForm(formData);
 
   if (!result.ok) {
@@ -85,7 +93,11 @@ export async function createExpense(
   }
 
   try {
-    await db.insert(expenses).values(result.values);
+    await db.insert(expenses).values({
+      ...result.values,
+      householdId: session.householdId,
+      createdById: session.userId,
+    });
   } catch (error) {
     if (isMissingCategory(error)) return MISSING_CATEGORY;
     throw error;
@@ -100,17 +112,36 @@ export async function updateExpense(
   _prevState: ExpenseFormState,
   formData: FormData,
 ): Promise<ExpenseFormState> {
+  const session = await getSession();
+  if (!session) {
+    return { formError: "Your session has expired. Sign in again." };
+  }
+
   const result = parseExpenseForm(formData);
 
   if (!result.ok) {
     return result.state;
   }
 
+  let updated;
+
   try {
-    await db.update(expenses).set(result.values).where(eq(expenses.id, id));
+    updated = await db
+      .update(expenses)
+      .set(result.values)
+      .where(
+        and(eq(expenses.id, id), eq(expenses.householdId, session.householdId)),
+      )
+      .returning({ id: expenses.id });
   } catch (error) {
     if (isMissingCategory(error)) return MISSING_CATEGORY;
     throw error;
+  }
+
+  // The WHERE clause is the control - a forged id simply matches nothing.
+  // This only turns that silent no-op into something the user can see.
+  if (updated.length === 0) {
+    return { formError: "That expense no longer exists." };
   }
 
   revalidatePath("/expenses");
@@ -118,6 +149,17 @@ export async function updateExpense(
 }
 
 export async function deleteExpense(id: number, _formData: FormData) {
-  await db.delete(expenses).where(eq(expenses.id, id));
+  const session = await getSession();
+
+  // A redirect is right here, unlike the form actions: a one-click delete has
+  // no typed input to lose.
+  if (!session) redirect("/sign-in");
+
+  await db
+    .delete(expenses)
+    .where(
+      and(eq(expenses.id, id), eq(expenses.householdId, session.householdId)),
+    );
+
   revalidatePath("/expenses");
 }

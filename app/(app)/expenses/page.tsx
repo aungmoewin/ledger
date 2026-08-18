@@ -13,10 +13,12 @@ import { formatCents } from "@/lib/money";
 import Link from "next/link";
 import { createExpense, deleteExpense } from "./actions";
 import { ExpenseForm } from "./expense-form";
+import { requireSession } from "@/lib/dal";
 
 export default async function ExpensesPage() {
+  const session = await requireSession();
   const [rows, categories] = await Promise.all([
-    listExpenses(),
+    listExpenses(session.householdId),
     listCategories(),
   ]);
 

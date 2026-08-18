@@ -29,5 +29,6 @@ export type ExpenseInput = z.infer<typeof expenseInputSchema>;
 
 export type ExpenseFormState = {
   ok?: boolean;
+  formError?: string;
   fieldErrors?: Record<string, string[]>;
 };

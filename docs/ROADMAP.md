@@ -59,15 +59,24 @@ also a study in _when_ a tool becomes justified.
 
 1. **Single Next app, not a monorepo.** Turborepo was considered and rejected: you add repo
    structure when a _second package_ justifies it. Restructure when a real need appears.
-2. **Neon HTTP driver to start, with a known expiry date.** `neon-http` cannot do interactive
-   transactions. Fine through Phase 3; **Phase 4 forces the switch** to `neon-websockets` or a
-   pooled connection, because a split expense must insert parent + children atomically.
+2. ~~**Neon HTTP driver to start, with a known expiry date.**~~ **Settled in Phase 2** (`652fdc7`),
+   two phases earlier than planned: provisioning a household and its owner membership needed one
+   atomic write, and `neon-http` sends one statement per round trip. Now `neon-serverless` with a
+   `Pool` over WebSocket. No `ws` package — Node has had a global `WebSocket` since v22, enforced
+   by `engines.node` in `package.json`.
 3. **`drizzle-kit generate` + `migrate`, never `push`.** Phase 9 CI needs versioned, reviewable
    migration files in git. Committing to this from the first table avoids schema drift.
 4. **Stable Drizzle, not the `@rc` channel** the get-started docs advertise. Adopting a release
    candidate is a decision needing its own justification, not a default.
 5. **Scaffolded with recommended defaults and no `src/` dir** — app code sits at the repo root
    (`app/`, `db/`, `lib/`), planning and ADRs in `docs/`.
+6. **Authorization lives in a Data Access Layer, not in layouts or a proxy.** A layout does not
+   render for a Server Action POST, so a guard there protects pages while leaving every action
+   open. Next 16's own guidance: a proxy is for optimistic checks only and "should not be your
+   only line of defense." The check belongs next to the query.
+7. **`proxy.ts`, not `middleware.ts`.** Deprecated and renamed in Next 16, export renamed with it.
+   Every Auth.js tutorial in the wild is still on the old name; codemod is
+   `npx @next/codemod@canary middleware-to-proxy .`.
 
 ---
 
@@ -109,6 +118,36 @@ Each phase: one commit, green before moving on.
   real-world migration dance: add nullable → backfill → set NOT NULL.
 - **Done when.** Two accounts see disjoint data, and a member is denied an owner-only action
   _on the server_.
+
+#### Phase 2 step order
+
+| #   | Beat                                                        | Why here                                                                         |
+| --- | ----------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 1   | `lib/dal.ts` — cached `requireSession()` / `getSession()`   | Everything downstream needs a session type where `householdId` is non-optional   |
+| 2   | Scope every expense query and action by household           | The DAL is decoration until callers cannot skip it                               |
+| 3   | Sign-out action + header identity                           | Nothing calls `signOut` today; beat 6 needs something to call                    |
+| 4   | `session.maxAge` — 2h sliding idle window                   | One line, meaningless without beat 5                                             |
+| 5   | `proxy.ts`                                                  | Redirect UX, **and** the cookie rotation that makes beat 4 actually slide        |
+| 6   | `token_version` revocation, 5-minute staleness bound        | Most likely to lock you out mid-test; needs the rest stable                      |
+| 7   | Contract migration: backfill `household_id`, `SET NOT NULL` | The one irreversible step — safe only once beats 1–2 prove no path writes a null |
+
+**Why `householdId` is a required parameter, not read from the session inside each query.**
+Queries stay pure and testable, and a caller that forgot to scope fails to compile rather than
+failing review.
+
+**Why pages and actions get different helpers.** `requireSession()` redirects — correct for a
+page. An action redirecting mid-POST discards whatever the user typed, so `getSession()` returns
+`null` and the action reports a form error instead.
+
+**Sliding sessions need a writable response.** A Server Component cannot set cookies, so `auth()`
+in a page reads the token without re-issuing it. Without `proxy.ts` the idle window degrades into
+an absolute cap that logs out active users. Verified in `@auth/core/lib/actions/session.js`.
+
+**Deferred deliberately.** A client-side idle timer (UX only — trivially bypassed, so it ships
+after the real controls and says so in a comment). A current-password gate on password change,
+which stops a session compromise escalating into permanent lockout — belongs with account
+settings. Step-up auth on ordinary edits is rejected: bank-grade friction for data the household
+already shares by design.
 
 ### Phase 3 — Transactions list: TanStack Query + RSC hydration
 

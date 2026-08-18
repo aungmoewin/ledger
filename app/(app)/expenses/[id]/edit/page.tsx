@@ -3,6 +3,7 @@ import { getExpenseById } from "@/db/queries/expenses";
 import { notFound } from "next/navigation";
 import { ExpenseForm } from "../../expense-form";
 import { updateExpense } from "../../actions";
+import { requireSession } from "@/lib/dal";
 
 export default async function EditExpensePage({
   params,
@@ -13,9 +14,9 @@ export default async function EditExpensePage({
   const expenseId = Number(id);
 
   if (!Number.isInteger(expenseId) || expenseId <= 0) notFound();
-
+  const session = await requireSession();
   const [expense, categories] = await Promise.all([
-    getExpenseById(expenseId),
+    getExpenseById(expenseId, session.householdId),
     listCategories(),
   ]);
 

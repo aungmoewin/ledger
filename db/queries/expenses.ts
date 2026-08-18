@@ -1,8 +1,8 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, expenses } from "@/db/schema";
 
-export async function listExpenses() {
+export async function listExpenses(householdId: number) {
   return (
     db
       .select({
@@ -15,6 +15,7 @@ export async function listExpenses() {
       })
       .from(expenses)
       .innerJoin(categories, eq(expenses.categoryId, categories.id))
+      .where(eq(expenses.householdId, householdId))
       .orderBy(desc(expenses.spentOn), desc(expenses.id))
       // Guardrail until Phase 3 replaces this with real cursor pagination.
       // An unbounded list query is fine at ten rows and a problem at ten thousand.
@@ -22,7 +23,7 @@ export async function listExpenses() {
   );
 }
 
-export async function getExpenseById(id: number) {
+export async function getExpenseById(id: number, householdId: number) {
   const [row] = await db
     .select({
       id: expenses.id,
@@ -32,7 +33,7 @@ export async function getExpenseById(id: number) {
       note: expenses.note,
     })
     .from(expenses)
-    .where(eq(expenses.id, id))
+    .where(and(eq(expenses.id, id), eq(expenses.householdId, householdId)))
     .limit(1);
 
   return row ?? null;
