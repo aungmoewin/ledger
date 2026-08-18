@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth";
 
 export type ActiveSession = {
   userId: string;
+  name: string | null;
+  email: string | null;
   householdId: number;
   role: "owner" | "member";
 };
@@ -29,6 +31,8 @@ export const getSession = cache(async (): Promise<ActiveSession | null> => {
 
   return {
     userId: session.user.id,
+    name: session.user.name ?? null,
+    email: session.user.email ?? null,
     householdId: session.householdId,
     role: session.role,
   };

@@ -44,7 +44,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // JWT for it. The cost is that a token stays valid until it expires.
   // TODO step 6: check users.token_version in the jwt callback so bumping it
   // invalidates outstanding tokens. Nothing reads that column yet.
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    // Idle, not absolute: @auth/core re-signs the token with a fresh expiry on
+    // every session read, so this ends an idle session without interrupting an
+    // active one.
+    //
+    // It only slides where a response can set cookies. A Server Component
+    // cannot, so this depends on proxy.ts propagating the re-issued cookie -
+    // remove that file and this becomes an absolute cap that logs out active
+    // users mid-work.
+    maxAge: 2 * 60 * 60,
+  },
   pages: { signIn: "/sign-in" },
 
   providers: [
@@ -83,6 +94,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
 
   callbacks: {
+    authorized: ({ auth, request }) => {
+      // Optimistic by design: cookie presence only, no database. This runs on
+      // every request including prefetches, and per Next's own guidance it is
+      // not a security control - the DAL is. This only decides redirects.
+      const signedIn = !!auth?.user;
+      // Normalised: the proxy sees the raw path, so "/sign-up/" would miss the
+      // comparison below and get bounced to /sign-in like any other route.
+      const pathname = request.nextUrl.pathname.replace(/\/$/, "") || "/";
+
+      // The (auth) pages must stay reachable while signed out. An unauthorized
+      // result redirects to pages.signIn, and only /sign-in itself is exempt
+      // from that - so without this branch, /sign-up bounces to /sign-in.
+      if (pathname === "/sign-in" || pathname === "/sign-up") {
+        return signedIn
+          ? Response.redirect(new URL("/expenses", request.nextUrl))
+          : true;
+      }
+
+      return signedIn;
+    },
+
     jwt: async ({ token, user }) => {
       // `user` is only present on sign-in. Provisioning here rather than in
       // events.createUser means it is self-healing: that event fires once ever,
@@ -95,6 +127,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.name ?? null,
         );
         token.householdId = membership.householdId;
+        // TODO P2.9: a role change must bump users.token_version. This value is
+        // a snapshot from sign-in and is never refreshed, so a demoted owner
+        // would keep owner powers until the token expires.
         token.role = membership.role;
       }
       return token;
