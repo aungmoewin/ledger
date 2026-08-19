@@ -32,3 +32,19 @@ export type ExpenseFormState = {
   formError?: string;
   fieldErrors?: Record<string, string[]>;
 };
+
+export type ExpenseCursor = { spentOn: string; id: number };
+
+export type ExpenseListItem = {
+  id: number;
+  amountCents: number;
+  spentOn: string;
+  note: string | null;
+  categoryId: number;
+  categoryName: string;
+};
+
+export type ExpensesPage = {
+  items: ExpenseListItem[];
+  nextCursor: ExpenseCursor | null;
+};

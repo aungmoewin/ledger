@@ -1,25 +1,27 @@
-import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
 import { listCategories } from "@/db/queries/categories";
 import { listExpensesPage } from "@/db/queries/expenses";
-import { formatCents } from "@/lib/money";
-import Link from "next/link";
-import { createExpense, deleteExpense } from "./actions";
-import { ExpenseForm } from "./expense-form";
 import { requireSession } from "@/lib/dal";
+import { getQueryClient } from "@/lib/query-client";
+import { expenseKeys } from "@/lib/query-keys";
+import { createExpense } from "./actions";
+import { ExpenseForm } from "./expense-form";
+import { ExpenseList } from "./expense-list";
 
 export default async function ExpensesPage() {
   const session = await requireSession();
-  const [page, categories] = await Promise.all([
-    listExpensesPage({ householdId: session.householdId }),
+  const queryClient = getQueryClient();
+
+  const [categories] = await Promise.all([
     listCategories(),
+    // The server calls the database directly; the client calls the route
+    // handler. Both must return the same shape - ExpensesPage is what keeps
+    // them honest.
+    queryClient.prefetchInfiniteQuery({
+      queryKey: expenseKeys.list(session.householdId),
+      queryFn: () => listExpensesPage({ householdId: session.householdId }),
+      initialPageParam: null,
+    }),
   ]);
 
   return (
@@ -28,55 +30,9 @@ export default async function ExpensesPage() {
 
       <ExpenseForm categories={categories} action={createExpense} />
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Note</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {page.items.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={5} className="text-muted-foreground">
-                No expenses yet.
-              </TableCell>
-            </TableRow>
-          ) : (
-            page.items.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>{row.spentOn}</TableCell>
-                <TableCell>{row.categoryName}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {row.note}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatCents(row.amountCents)}
-                </TableCell>
-                <TableCell className="flex justify-end gap-1">
-                  <Link
-                    href={`/expenses/${row.id}/edit`}
-                    className={buttonVariants({
-                      variant: "ghost",
-                      size: "sm",
-                    })}
-                  >
-                    Edit
-                  </Link>
-                  <form action={deleteExpense.bind(null, row.id)}>
-                    <Button variant="ghost" size="sm" type="submit">
-                      Delete
-                    </Button>
-                  </form>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      <HydrationBoundary state={dehydrate(queryClient)}>
+        <ExpenseList householdId={session.householdId} />
+      </HydrationBoundary>
     </>
   );
 }

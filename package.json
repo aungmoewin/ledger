@@ -16,7 +16,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file=.env.local db/seed.ts",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "check": "npm run format && npm run typecheck && npm run lint"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",

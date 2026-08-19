@@ -1,8 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, expenses } from "@/db/schema";
-
-export type ExpenseCursor = { spentOn: string; id: number };
+import type { ExpenseCursor, ExpensesPage } from "@/lib/validation/expense";
 
 const PAGE_SIZE = 20;
 
@@ -26,7 +25,7 @@ export async function listExpensesPage({
   householdId: number;
   cursor?: ExpenseCursor;
   limit?: number;
-}) {
+}): Promise<ExpensesPage> {
   const rows = await db
     .select({
       id: expenses.id,
