@@ -6,13 +6,26 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { compare } from "bcryptjs";
 import { db } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
-import { getUserByEmail } from "@/db/queries/users";
-import { ensureHouseholdForUser } from "@/db/queries/households";
+import { getTokenVersion, getUserByEmail } from "@/db/queries/users";
+import {
+  ensureHouseholdForUser,
+  getMembershipForUser,
+} from "@/db/queries/households";
 import { signInSchema } from "@/lib/validation/auth";
 
 // A well-formed bcrypt hash that no password matches. Compared against when the
 // email is unknown, so both branches cost the same amount of work.
 const DUMMY_PASSWORD_HASH = `$2a$10$${"x".repeat(53)}`;
+
+// How stale session data may be. Checking every request would mean a database
+// read per request - the exact cost JWT sessions exist to avoid, and proxy.ts
+// runs this callback on every navigation. This is the documented worst case
+// between a change landing in the database and a live session seeing it.
+//
+// TODO before deploy: 10s is a development value, chosen so revocation is
+// observable while testing. In production this is a database read every ten
+// seconds per active user; 5 * 60 * 1000 is the intended setting.
+const SESSION_RECHECK_MS = 10 * 1000;
 
 // MUST pass the tables explicitly - our table names are plural, and a bare
 // DrizzleAdapter(db) would query the adapter's singular defaults ("user",
@@ -41,9 +54,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 
   // The Credentials provider cannot use database sessions - Auth.js requires
-  // JWT for it. The cost is that a token stays valid until it expires.
-  // TODO step 6: check users.token_version in the jwt callback so bumping it
-  // invalidates outstanding tokens. Nothing reads that column yet.
+  // JWT for it. Do not "simplify" this to strategy: "database"; password
+  // sign-in stops working. Revocation is therefore explicit instead: bumping
+  // users.token_version invalidates outstanding tokens, checked in jwt below.
   session: {
     strategy: "jwt",
     // Idle, not absolute: @auth/core re-signs the token with a fresh expiry on
@@ -127,11 +140,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.name ?? null,
         );
         token.householdId = membership.householdId;
-        // TODO P2.9: a role change must bump users.token_version. This value is
-        // a snapshot from sign-in and is never refreshed, so a demoted owner
-        // would keep owner powers until the token expires.
         token.role = membership.role;
+        token.tokenVersion = await getTokenVersion(user.id);
+        token.checkedAt = Date.now();
+
+        return token;
       }
+
+      if (!token.sub) return null;
+
+      if (Date.now() - (token.checkedAt ?? 0) < SESSION_RECHECK_MS) {
+        return token;
+      }
+
+      const [tokenVersion, membership] = await Promise.all([
+        getTokenVersion(token.sub),
+        getMembershipForUser(token.sub),
+      ]);
+
+      // Fail closed on every ambiguity: deleted user, bumped version, revoked
+      // membership. Returning null clears the session cookie.
+      if (tokenVersion === null || tokenVersion !== token.tokenVersion) {
+        return null;
+      }
+
+      if (!membership) return null;
+
+      // Refreshing these is why a role change needs no manual version bump -
+      // every live session picks it up within SESSION_RECHECK_MS on its own.
+      token.householdId = membership.householdId;
+      token.role = membership.role;
+      token.checkedAt = Date.now();
+
       return token;
     },
     session: async ({ session, token }) => {

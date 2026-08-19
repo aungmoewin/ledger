@@ -5,8 +5,9 @@ placed where it is genuinely justified**, for software-team-lead readiness.
 
 Planning started 2026-08-04. Standalone repo — not part of `modern-react-stack`.
 
-> **Status:** Phase 0 in progress (scaffold + Neon + Drizzle + schema). Update the phase
-> checklist at the bottom as each one lands.
+> **Status:** Phase 2 all but complete — auth, households, and household-scoped data isolation
+> are in, with P2.9 (roles and invites) deferred. Phase 3 is next. Update the phase checklist at
+> the bottom as each one lands.
 
 **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) — the route tree and component hierarchy,
 with every Server/Client boundary marked. This file covers _when_ each piece gets built;
@@ -149,6 +150,18 @@ which stops a session compromise escalating into permanent lockout — belongs w
 settings. Step-up auth on ordinary edits is rejected: bank-grade friction for data the household
 already shares by design.
 
+**P2.9 deferred to when invites are needed.** Data isolation is complete after beat 7 — two
+accounts see disjoint data, enforced by the schema rather than by discipline. The other half of
+this phase's "done when" (_a member is denied an owner-only action on the server_) waits for the
+household page, because there is no second member to deny yet. The membership refresh in beat 6
+is the groundwork; the permission checks land with the invite flow.
+
+**`token_version` has no caller yet, on purpose.** Its one mandatory trigger is a password
+change — without a bump, a session an attacker already holds survives the new password. Account
+settings do not exist, so the lever is wired up and dormant rather than driven by a button
+invented to justify it. Role and household changes deliberately do _not_ bump it; the jwt
+recheck re-reads the membership instead.
+
 ### Phase 3 — Transactions list: TanStack Query + RSC hydration
 
 - **Build.** Paginated transactions list. Server prefetch into a `HydrationBoundary`, then
@@ -165,8 +178,8 @@ already shares by design.
 
 - **Build.** RHF `useFieldArray` form splitting one expense across categories, with a
   cross-field Zod rule that splits must sum to the total. Multi-step add-expense wizard. Filter
-  panel in Zustand, shareable filters synced to the URL. **Driver swap** to
-  `neon-websockets`/pooled so `db.transaction()` can insert parent + children atomically.
+  panel in Zustand, shareable filters synced to the URL. ~~Driver swap~~ — already done in
+  Phase 2 (`652fdc7`), so `db.transaction()` is available for the parent + children insert.
 - **New stack.** React Hook Form, Zustand (plus the planned driver change).
 - **Lead lesson.** Invariants belong in the database, not in application code hoping nothing
   fails halfway. Place three kinds of state deliberately: ephemeral UI in Zustand, shareable
@@ -258,10 +271,11 @@ a tool is the senior half of the skill.
 
 ## Progress
 
-- [ ] Phase 0 — Foundation: Postgres + Drizzle ← in progress
-- [ ] Phase 1 — Expenses CRUD
-- [ ] Phase 2 — Auth + households + RBAC
-- [ ] Phase 3 — Transactions list (TanStack Query + RSC hydrate)
+- [x] Phase 0 — Foundation: Postgres + Drizzle
+- [x] Phase 1 — Expenses CRUD
+- [~] Phase 2 — Auth + households + RBAC — data isolation done; **P2.9 (household page,
+  roles, invites) deferred** until invites are needed. See the Phase 2 notes above.
+- [ ] Phase 3 — Transactions list (TanStack Query + RSC hydrate) ← next
 - [ ] Phase 4 — Split expenses, wizard, filters
 - [ ] Phase 5 — Multi-currency + FX API + MSW
 - [ ] Phase 6 — Dashboard + charts

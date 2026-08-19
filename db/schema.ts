@@ -26,13 +26,13 @@ export const expenses = pgTable("expenses", {
   categoryId: integer("category_id")
     .notNull()
     .references(() => categories.id, { onDelete: "restrict" }),
-  // Nullable during the "expand" step: there are no households yet, so there
-  // is nothing to point existing rows at. Migration 0003 backfills these and
-  // sets NOT NULL once sign-in exists. A permanently nullable scope column is
-  // how cross-tenant leaks start - do not leave it this way.
-  householdId: integer("household_id").references(() => households.id, {
-    onDelete: "cascade",
-  }),
+  // Contracted in 0004. Nullable through the expand phase because households
+  // did not exist yet; every write path has set it since the data access layer
+  // landed, so the constraint is safe now. A permanently nullable scope column
+  // is how cross-tenant leaks start.
+  householdId: integer("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
   // set null, not cascade: a member leaving must not delete the household's
   // shared financial history - only the attribution.
   createdById: text("created_by_id").references(() => users.id, {

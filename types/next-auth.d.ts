@@ -21,5 +21,7 @@ declare module "@auth/core/jwt" {
   interface JWT {
     householdId?: number;
     role?: "owner" | "member";
+    tokenVersion?: number | null;
+    checkedAt?: number;
   }
 }
