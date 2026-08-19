@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listCategories } from "@/db/queries/categories";
-import { listExpenses } from "@/db/queries/expenses";
+import { listExpensesPage } from "@/db/queries/expenses";
 import { formatCents } from "@/lib/money";
 import Link from "next/link";
 import { createExpense, deleteExpense } from "./actions";
@@ -17,8 +17,8 @@ import { requireSession } from "@/lib/dal";
 
 export default async function ExpensesPage() {
   const session = await requireSession();
-  const [rows, categories] = await Promise.all([
-    listExpenses(session.householdId),
+  const [page, categories] = await Promise.all([
+    listExpensesPage({ householdId: session.householdId }),
     listCategories(),
   ]);
 
@@ -39,14 +39,14 @@ export default async function ExpensesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.length === 0 ? (
+          {page.items.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} className="text-muted-foreground">
                 No expenses yet.
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((row) => (
+            page.items.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>{row.spentOn}</TableCell>
                 <TableCell>{row.categoryName}</TableCell>

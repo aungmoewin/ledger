@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   date,
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -20,30 +21,45 @@ export const categories = pgTable("categories", {
     .defaultNow(),
 });
 
-export const expenses = pgTable("expenses", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  amountCents: integer("amount_cents").notNull(),
-  categoryId: integer("category_id")
-    .notNull()
-    .references(() => categories.id, { onDelete: "restrict" }),
-  // Contracted in 0004. Nullable through the expand phase because households
-  // did not exist yet; every write path has set it since the data access layer
-  // landed, so the constraint is safe now. A permanently nullable scope column
-  // is how cross-tenant leaks start.
-  householdId: integer("household_id")
-    .notNull()
-    .references(() => households.id, { onDelete: "cascade" }),
-  // set null, not cascade: a member leaving must not delete the household's
-  // shared financial history - only the attribution.
-  createdById: text("created_by_id").references(() => users.id, {
-    onDelete: "set null",
-  }),
-  spentOn: date("spent_on").notNull(),
-  note: text(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const expenses = pgTable(
+  "expenses",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    amountCents: integer("amount_cents").notNull(),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "restrict" }),
+    // Contracted in 0004. Nullable through the expand phase because households
+    // did not exist yet; every write path has set it since the data access
+    // layer landed, so the constraint is safe now. A permanently nullable scope
+    // column is how cross-tenant leaks start.
+    householdId: integer("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    // set null, not cascade: a member leaving must not delete the household's
+    // shared financial history - only the attribution.
+    createdById: text("created_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    spentOn: date("spent_on").notNull(),
+    note: text(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Must match listExpensesPage's ORDER BY exactly, direction included. For a
+    // composite index the per-column direction has to line up with the sort or
+    // Postgres cannot walk it as one ordered scan. Keyset pagination fixes the
+    // OFFSET problem, not the missing-index problem - without this every page
+    // is still a full sort of the household's rows.
+    index("expenses_household_spent_on_id_idx").on(
+      table.householdId,
+      table.spentOn.desc(),
+      table.id.desc(),
+    ),
+  ],
+);
 
 // --- Auth.js adapter tables -------------------------------------------------
 // Column names here are camelCase ("userId", "emailVerified", "sessionToken")

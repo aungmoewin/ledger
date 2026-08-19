@@ -1,0 +1,1 @@
+CREATE INDEX "expenses_household_spent_on_id_idx" ON "expenses" USING btree ("household_id","spent_on" DESC NULLS LAST,"id" DESC NULLS LAST);
