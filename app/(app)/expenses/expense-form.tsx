@@ -1,6 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useActionState, useEffect } from "react";
+import { expenseKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/field-error";
 import { Input } from "@/components/ui/input";
@@ -33,6 +35,17 @@ export function ExpenseForm({
   };
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
+  const queryClient = useQueryClient();
+
+  // The Query cache owns the list, so the client is what has to refresh it -
+  // the action no longer calls revalidatePath. Invalidating on the `all` prefix
+  // rather than a specific household keeps this component ignorant of which
+  // household it is editing.
+  useEffect(() => {
+    if (state.ok) {
+      queryClient.invalidateQueries({ queryKey: expenseKeys.all });
+    }
+  }, [state.ok, queryClient]);
 
   return (
     <form

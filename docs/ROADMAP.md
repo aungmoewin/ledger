@@ -207,6 +207,9 @@ recheck re-reads the membership instead.
 - **Lead lesson.** **Aggregate in the database** — don't ship 10,000 rows to sum them. This is
   where the index decision deliberately deferred in Phase 0 gets made, with `EXPLAIN ANALYZE`
   as evidence rather than a guess. Charts need a second encoding beyond colour to be accessible.
+- **Seed load-shaped data first.** `EXPLAIN` against a handful of rows measures nothing — every
+  planner choice is cost-based, and every cost comes from table statistics. Generate a few
+  thousand expenses, `ANALYZE`, then read the plan. (This was going to be Phase 8's job.)
 - **Done when.** Each chart comes from one aggregate query, and `EXPLAIN` shows an index scan
   instead of a sequential one.
 
@@ -218,7 +221,11 @@ recheck re-reads the membership instead.
 - **Lead lesson.** A phase with no new tool is a feature, not filler; it's where you feel
   whether the previous seven fit together. Worth arguing: does "percent of budget used" belong
   in a DB view, the query, or the component?
-- **Done when.** Setting a limit shows live progress and warns past 100%.
+- **Also, as the final phase:** clear the deferred list. Restore `SESSION_RECHECK_MS` to
+  `5 * 60 * 1000`, and either close the sign-up enumeration leak or record it as knowingly
+  accepted — the Phase 8 that was going to hold both no longer exists.
+- **Done when.** Setting a limit shows live progress and warns past 100%, and no `TODO` in the
+  codebase points at a phase that is not being built.
 
 ### Phase 8 — The test suite
 
@@ -256,8 +263,25 @@ recheck re-reads the membership instead.
 ## Shape of the build
 
 Phases 0–2 are genuinely new territory (a real DB, real auth). Phases 3–6 are where the
-client-side tools land. Phases 8–10 are what separate a portfolio piece from a project. Each
-phase's "lead lesson" is deliberately the part that isn't in the docs.
+client-side tools land. Each phase's "lead lesson" is deliberately the part that isn't in the
+docs.
+
+## Scope: the build ends at Phase 7
+
+**Phases 8–10 are out of scope** (decided 2026-08-21). Vitest/RTL/Playwright, the GitHub Actions
+matrix, Sentry, and the Vercel deploy with its ADRs are not being built.
+
+Two consequences worth naming rather than discovering later:
+
+1. **Nothing is enforced.** `npm run check` exists but only runs when someone remembers. The
+   roadmap's own Phase 9 line — "a standard not enforced in CI is a preference" — now applies to
+   this repo.
+2. **Three deferred items were parked in the cut phases** and needed rehoming: the
+   `SESSION_RECHECK_MS` production value, the sign-up enumeration leak, and load-shaped seed
+   data for `EXPLAIN`. All three now sit in Phases 6–7 below.
+
+The Testing / CI/CD / Observability / Deploy rows in the enterprise-layers table above stay as a
+record of the intended design, not of what was built.
 
 ## The honest lead-note
 
@@ -280,9 +304,9 @@ a tool is the senior half of the skill.
 - [ ] Phase 5 — Multi-currency + FX API + MSW
 - [ ] Phase 6 — Dashboard + charts
 - [ ] Phase 7 — Budgets
-- [ ] Phase 8 — Test suite
-- [ ] Phase 9 — Pipeline, monitoring, security
-- [ ] Phase 10 — Ship + ADRs
+- ~~Phase 8 — Test suite~~ — **out of scope**
+- ~~Phase 9 — Pipeline, monitoring, security~~ — **out of scope**
+- ~~Phase 10 — Ship + ADRs~~ — **out of scope**
 
 ## Working agreement
 

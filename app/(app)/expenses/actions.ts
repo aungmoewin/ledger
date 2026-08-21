@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { expenses } from "@/db/schema";
@@ -103,7 +102,8 @@ export async function createExpense(
     throw error;
   }
 
-  revalidatePath("/expenses");
+  // No revalidatePath. See the note above deleteExpense: the TanStack Query
+  // cache owns this list now, and re-rendering the route would fight it.
   return { ok: true };
 }
 
@@ -144,16 +144,32 @@ export async function updateExpense(
     return { formError: "That expense no longer exists." };
   }
 
-  revalidatePath("/expenses");
   redirect("/expenses");
 }
 
-export async function deleteExpense(id: number, _formData: FormData) {
+/**
+ * Returns form state so the client can observe completion and invalidate the
+ * Query cache. Still a <form action>, so it works before hydration.
+ *
+ * None of these actions call revalidatePath, deliberately. /expenses reads
+ * cookies via auth(), so it is a dynamic route with no cached render to
+ * invalidate - a no-JS POST gets a fresh server render either way. What
+ * revalidatePath *did* do was re-render the route and ship a dehydrated cache
+ * holding only page 1; HydrationBoundary applies that over the client's
+ * existing query because its dataUpdatedAt is newer, and hydrate() replaces
+ * `data` wholesale. For an infinite query that means three loaded pages
+ * collapse to one on every mutation.
+ */
+export async function deleteExpense(
+  id: number,
+  _prevState: ExpenseFormState,
+  _formData: FormData,
+): Promise<ExpenseFormState> {
   const session = await getSession();
 
-  // A redirect is right here, unlike the form actions: a one-click delete has
-  // no typed input to lose.
-  if (!session) redirect("/sign-in");
+  if (!session) {
+    return { formError: "Your session has expired. Sign in again." };
+  }
 
   await db
     .delete(expenses)
@@ -161,5 +177,5 @@ export async function deleteExpense(id: number, _formData: FormData) {
       and(eq(expenses.id, id), eq(expenses.householdId, session.householdId)),
     );
 
-  revalidatePath("/expenses");
+  return { ok: true };
 }
