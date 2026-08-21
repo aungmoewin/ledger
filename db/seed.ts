@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-http";
 import { like } from "drizzle-orm";
-import { categories, expenses, memberships } from "./schema";
+import { categories, expenses, expenseSplits, memberships } from "./schema";
 import { env } from "@/lib/env";
 
 // A script is not the app runtime. db/index.ts is marked server-only, which
@@ -43,6 +43,8 @@ async function seedExpenses() {
     throw new Error(`--expenses must be a non-negative integer`);
   }
 
+  // Their splits go too, via the cascade on expense_splits.expense_id - so the
+  // cleanup path needed no change when splits arrived.
   const removed = await db
     .delete(expenses)
     .where(like(expenses.note, `${SEED_NOTE_PREFIX}%`))
@@ -100,7 +102,33 @@ async function seedExpenses() {
   const CHUNK = 500;
 
   for (let i = 0; i < rows.length; i += CHUNK) {
-    await db.insert(expenses).values(rows.slice(i, i + CHUNK));
+    // Returning the two columns the splits need, rather than mapping inserted
+    // ids back onto the input by position. Postgres does return a multi-row
+    // INSERT ... RETURNING in insertion order, but nothing guarantees it, and
+    // reading the values off the rows costs nothing.
+    const inserted = await db
+      .insert(expenses)
+      .values(rows.slice(i, i + CHUNK))
+      .returning({
+        id: expenses.id,
+        categoryId: expenses.categoryId,
+        amountCents: expenses.amountCents,
+      });
+
+    // One split per expense carrying the whole amount - the shape 0006's
+    // backfill produced. That backfill was a one-time event, so without this
+    // every seed run replaces rows that have splits with rows that do not.
+    //
+    // Two statements and no transaction: this client is neon-http, which cannot
+    // open one, and the seed does not need atomicity. Its failure mode is "run
+    // it again", which is not true of a user watching a form submit.
+    await db.insert(expenseSplits).values(
+      inserted.map((row) => ({
+        expenseId: row.id,
+        categoryId: row.categoryId,
+        amountCents: row.amountCents,
+      })),
+    );
   }
 
   console.log(

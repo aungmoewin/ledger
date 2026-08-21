@@ -82,6 +82,12 @@ export function ExpenseForm({
           ))}
         </select>
         <FieldError messages={state.fieldErrors?.categoryId} />
+        {/* The cross-field rules - splits sum to the total, no repeated
+            category - report under "splits". Unreachable through this form,
+            which can only send one split, and that is the point: the guard
+            exists for a forged POST. It becomes reachable when the form grows
+            a field array. */}
+        <FieldError messages={state.fieldErrors?.splits} />
       </div>
 
       <div className="grid gap-2">
