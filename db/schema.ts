@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   date,
   index,
   integer,
@@ -25,7 +26,20 @@ export const expenses = pgTable(
   "expenses",
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    // Authoritative total. The rule that expense_splits must sum to this is NOT
+    // a database constraint - a CHECK cannot reference another table - so it
+    // lives in the Zod schema and the insert transaction. A real limit on "put
+    // invariants in the database": atomicity is enforceable there, this sum is
+    // not.
+    //
+    // The reconciliation query, for when you need to check by hand:
+    //   SELECT e.id FROM expenses e JOIN expense_splits s ON s.expense_id = e.id
+    //   GROUP BY e.id, e.amount_cents
+    //   HAVING e.amount_cents <> sum(s.amount_cents);
     amountCents: integer("amount_cents").notNull(),
+    // Superseded by expense_splits and dropped in the contract migration. Kept
+    // only so the app keeps working between the backfill and the read-path
+    // change - do not add new reads of this column.
     categoryId: integer("category_id")
       .notNull()
       .references(() => categories.id, { onDelete: "restrict" }),
@@ -58,6 +72,32 @@ export const expenses = pgTable(
       table.spentOn.desc(),
       table.id.desc(),
     ),
+  ],
+);
+
+export const expenseSplits = pgTable(
+  "expense_splits",
+  {
+    // cascade: a split has no meaning without its expense.
+    expenseId: integer("expense_id")
+      .notNull()
+      .references(() => expenses.id, { onDelete: "cascade" }),
+    // restrict, matching what expenses.category_id used to do - a category in
+    // use must not be deletable.
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "restrict" }),
+    amountCents: integer("amount_cents").notNull(),
+  },
+  (table) => [
+    // A category cannot appear twice in one expense. Enforced here rather than
+    // in the form, because two concurrent submissions would both pass an
+    // application-level check and only the database can serialise them.
+    primaryKey({ columns: [table.expenseId, table.categoryId] }),
+    check("expense_splits_amount_positive", sql`${table.amountCents} > 0`),
+    // The composite PK already serves expense_id lookups; its leading column is
+    // expense_id. Phase 6 groups by category, which needs its own index.
+    index("expense_splits_category_id_idx").on(table.categoryId),
   ],
 );
 
