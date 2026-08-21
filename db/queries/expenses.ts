@@ -1,7 +1,11 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { categories, expenses } from "@/db/schema";
-import type { ExpenseCursor, ExpensesPage } from "@/lib/validation/expense";
+import { categories, expenses, expenseSplits } from "@/db/schema";
+import type {
+  ExpenseCursor,
+  ExpensesPage,
+  ExpenseSplitView,
+} from "@/lib/validation/expense";
 
 const PAGE_SIZE = 20;
 
@@ -32,33 +36,64 @@ export async function listExpensesPage({
       amountCents: expenses.amountCents,
       spentOn: expenses.spentOn,
       note: expenses.note,
-      categoryId: expenses.categoryId,
-      categoryName: categories.name,
     })
     .from(expenses)
-    .innerJoin(categories, eq(expenses.categoryId, categories.id))
     .where(
       and(
         eq(expenses.householdId, householdId),
-        // Row-value comparison rather than
-        // `spent_on < x OR (spent_on = x AND id < y)`. Postgres compares tuples
-        // lexicographically and can walk the composite index directly.
         cursor
           ? sql`(${expenses.spentOn}, ${expenses.id}) < (${cursor.spentOn}::date, ${cursor.id}::integer)`
           : undefined,
       ),
     )
     .orderBy(desc(expenses.spentOn), desc(expenses.id))
-    // One more than asked for. If it comes back there is another page - cheaper
-    // than a second COUNT, and it cannot disagree with the rows just fetched.
     .limit(limit + 1);
 
   const hasMore = rows.length > limit;
-  const items = hasMore ? rows.slice(0, limit) : rows;
-  const last = items.at(-1);
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page.at(-1);
+
+  // Exactly two queries, not N+1: one page, then one lookup for that page's
+  // splits. Bounded by `limit`, so it does not grow with the table.
+  const splitRows = page.length
+    ? await db
+        .select({
+          expenseId: expenseSplits.expenseId,
+          categoryId: expenseSplits.categoryId,
+          categoryName: categories.name,
+          amountCents: expenseSplits.amountCents,
+        })
+        .from(expenseSplits)
+        .innerJoin(categories, eq(expenseSplits.categoryId, categories.id))
+        .where(
+          inArray(
+            expenseSplits.expenseId,
+            page.map((row) => row.id),
+          ),
+        )
+        // Largest first, so the display can show the dominant category.
+        .orderBy(desc(expenseSplits.amountCents))
+    : [];
+
+  const splitsByExpense = new Map<number, ExpenseSplitView[]>();
+
+  for (const split of splitRows) {
+    const list = splitsByExpense.get(split.expenseId) ?? [];
+
+    list.push({
+      categoryId: split.categoryId,
+      categoryName: split.categoryName,
+      amountCents: split.amountCents,
+    });
+
+    splitsByExpense.set(split.expenseId, list);
+  }
 
   return {
-    items,
+    items: page.map((row) => ({
+      ...row,
+      splits: splitsByExpense.get(row.id) ?? [],
+    })),
     nextCursor: hasMore && last ? { spentOn: last.spentOn, id: last.id } : null,
   };
 }

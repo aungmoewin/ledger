@@ -52,9 +52,7 @@ async function seedExpenses() {
 
   if (EXPENSE_COUNT === 0) return;
 
-  const categoryRows = await db
-    .select({ id: categories.id })
-    .from(categories);
+  const categoryRows = await db.select({ id: categories.id }).from(categories);
 
   // One query gives both halves of the attribution, and guarantees
   // created_by_id is always a real member of the household the expense lands

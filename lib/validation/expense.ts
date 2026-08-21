@@ -35,13 +35,18 @@ export type ExpenseFormState = {
 
 export type ExpenseCursor = { spentOn: string; id: number };
 
+export type ExpenseSplitView = {
+  categoryId: number;
+  categoryName: string;
+  amountCents: number;
+};
+
 export type ExpenseListItem = {
   id: number;
   amountCents: number;
   spentOn: string;
   note: string | null;
-  categoryId: number;
-  categoryName: string;
+  splits: ExpenseSplitView[];
 };
 
 export type ExpensesPage = {

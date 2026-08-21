@@ -132,7 +132,24 @@ export function ExpenseList({ householdId }: { householdId: number }) {
             items.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>{row.spentOn}</TableCell>
-                <TableCell>{row.categoryName}</TableCell>
+                <TableCell
+                  title={row.splits
+                    .map(
+                      (s) => `${s.categoryName} ${formatCents(s.amountCents)}`,
+                    )
+                    .join(", ")}
+                >
+                  {/* The zero case is reachable until the write path moves to
+                      splits: createExpense still populates expenses.category_id
+                      and inserts no split rows. Worth keeping afterwards too -
+                      a split-less expense is a data error, and showing it beats
+                      throwing on splits[0] and taking out the whole list. */}
+                  {row.splits.length === 0
+                    ? "Uncategorised"
+                    : row.splits.length === 1
+                      ? row.splits[0].categoryName
+                      : `${row.splits[0].categoryName} +${row.splits.length - 1}`}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {row.note}
                 </TableCell>
